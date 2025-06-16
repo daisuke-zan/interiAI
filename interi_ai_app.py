@@ -2,24 +2,23 @@ import streamlit as st
 import streamlit_antd_components as sac
 
 
-def sidebar():
-    # Custom CSS to modify sidebar width
-    st.markdown("""
-        <style>
-        [data-testid="stSidebar"][aria-expanded="true"] > div:first-child {
-            width: 500px;
-        }
-        [data-testid="stSidebar"][aria-expanded="false"] > div:first-child {
-            width: 500px;
-            margin-left: -500px;
-        }
-        </style>
-        """,
-                unsafe_allow_html=True)
-    with st.sidebar:
-        conditions = search_conditions()
+def init():
+    st.set_page_config(
+        page_title="Interior AI Demo ",
+        page_icon="🧊",
+        layout="wide",
+        initial_sidebar_state="collapsed",
+        #    menu_items={
+        #        'Get Help': 'https://www.extremelycoolapp.com/help',
+        #        'Report a bug': "https://www.extremelycoolapp.com/bug",
+        #        'About': "# This is a header. This is an *extremely* cool app!"
+        #    }
+    )
 
-    return conditions
+
+def sidebar():
+    with st.sidebar:
+        st.write("")
 
 
 def search_conditions():
@@ -157,6 +156,14 @@ Price:￥110,000
 
 
 if __name__ == "__main__":
-    conditions = sidebar()
-    # st.write(conditions)
-    chat_input()
+    init()
+    sidebar()
+
+    col1, col2 = st.columns([3, 7])
+    with col1:
+        with st.container(border=True):
+            conditions = search_conditions()
+            # st.write(conditions)
+    with col2:
+        with st.container(border=True):
+            chat_input()
