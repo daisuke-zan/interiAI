@@ -3,22 +3,25 @@ import streamlit_antd_components as sac
 
 
 def init():
-    st.set_page_config(
-        page_title="Interior AI Demo ",
-        page_icon="🧊",
-        layout="wide",
-        initial_sidebar_state="collapsed",
-        #    menu_items={
-        #        'Get Help': 'https://www.extremelycoolapp.com/help',
-        #        'Report a bug': "https://www.extremelycoolapp.com/bug",
-        #        'About': "# This is a header. This is an *extremely* cool app!"
-        #    }
-    )
+    st.set_page_config(page_title="Interior AI Demo ",
+                       page_icon="🪑",
+                       layout="wide",
+                       initial_sidebar_state="collapsed")
 
 
 def sidebar():
     with st.sidebar:
-        st.write("")
+        selected_menu = sac.menu([
+            sac.MenuItem('家具選定', icon='house-door-fill'),
+            sac.MenuItem('商品データ作成',
+                         icon='database-fill',
+                         children=[
+                             sac.MenuItem('スクレイピング', icon='globe'),
+                             sac.MenuItem('PDFデータ抽出', icon='filetype-pdf')
+                         ])
+        ],
+                                 open_all=True)
+    return selected_menu
 
 
 def search_conditions():
@@ -52,9 +55,9 @@ def search_conditions():
         # 価格帯
         with st.expander(label='価格帯', expanded=True):
             price = sac.chip(items=[
-                sac.ChipItem(label='Low', icon='cash-stack'),
-                sac.ChipItem(label='Middle', icon='cash-stack'),
-                sac.ChipItem(label='High', icon='cash-stack')
+                sac.ChipItem(label='Low', icon='cash-coin'),
+                sac.ChipItem(label='Middle', icon='cash-coin'),
+                sac.ChipItem(label='High', icon='cash-coin')
             ],
                              label='',
                              align='start',
@@ -156,14 +159,23 @@ Price:￥110,000
 
 
 if __name__ == "__main__":
+    # 初期化
     init()
-    sidebar()
-
-    col1, col2 = st.columns([3, 7])
-    with col1:
-        with st.container(border=True):
-            conditions = search_conditions()
-            # st.write(conditions)
-    with col2:
-        with st.container(border=True):
-            chat_input()
+    # サイドバーの表示
+    menu = sidebar()
+    # メインコンテンツの表示
+    if menu == '家具選定':
+        col1, col2 = st.columns([3, 7])
+        with col1:
+            with st.container(border=True):
+                conditions = search_conditions()
+                # st.write(conditions)
+        with col2:
+            with st.container(border=True):
+                chat_input()
+    elif menu == 'スクレイピング':
+        st.write("未実装")
+    elif menu == 'PDFデータ抽出':
+        st.write("未実装")
+    else:
+        st.write("")
