@@ -1,6 +1,12 @@
+import asyncio
+import io
+
 import pandas as pd
 import streamlit as st
 import streamlit_antd_components as sac
+from crawl4ai import AsyncWebCrawler, BrowserConfig, CrawlerRunConfig
+from sitemapparser import SiteMapParser
+from sitemapparser.exporters import JSONExporter
 
 
 def init():
@@ -8,7 +14,7 @@ def init():
                        page_icon="🪑",
                        layout="wide",
                        initial_sidebar_state="collapsed")
-    # セッション
+    # セッションステート
     if 'scraping_data_source_type' not in st.session_state:
         st.session_state['scraping_data_source_type'] = 0
     if 'scraping_all_url_list' not in st.session_state:
@@ -96,7 +102,7 @@ def search_conditions():
         # サイズ
         with st.container(border=True):
             st.caption('サイズ')
-            col1, col2, col3, col4 = st.columns(spec=4, gap='large')
+            col1, col2, col3, col4 = st.columns(spec=4, gap='small', border=True)
             with col1:
                 # 幅
                 witdh = st.slider(label='幅',
@@ -174,8 +180,7 @@ Price:￥110,000
 
 def scrapintg():
     url_analyze_flag = False
-    scraping_test_flag = False
-    scraping_all_flag = False
+    scraping_flag = False
 
     # データソース
     with st.expander(label='データソース', expanded=True):
@@ -195,6 +200,7 @@ def scrapintg():
         url = ''
         if data_source_type == 0:  # XMLサイトマップ
             url = st.text_input(label='XMLサイトマップのURLを入力してください',
+                                value='https://www.asplund-contract.com/product-sitemap.xml',
                                 placeholder='https://example.com/sitemap.xml',
                                 help='XMLサイトマップのURLを入力してください。')
         elif data_source_type == 1:  # URL
@@ -210,23 +216,26 @@ def scrapintg():
                                      use_container_width=True,
                                      disabled=True if url == '' else False)
 
-    # URL一覧
-    if url_analyze_flag or len(st.session_state['scraping_all_url_list']) > 0:
-        # ここにスクレイピングの処理を追加
+    df_urls = pd.DataFrame()
+
+    # URL解析
+    if url_analyze_flag:
+        if data_source_type == 0:  # XMLサイトマップ
+            sm = SiteMapParser(url)  # reads /sitemap.xml
+            json_exporter = JSONExporter(sm)
+            if sm.has_urls():
+                df_urls = pd.read_json(io.StringIO(json_exporter.export_urls()))
+                df_urls.drop(columns=['lastmod', 'changefreq', 'priority'], inplace=True)
+                df_urls.rename(columns={'loc': 'URL'}, inplace=True)
+        elif data_source_type == 1:  # URL
+            st.write("未実装")
+    else:
+        df_urls = st.session_state['scraping_all_url_list']
+
+    if len(df_urls) > 0:
         with st.expander(label='URL一覧', expanded=True):
-            df = pd.DataFrame([
-                {
-                    "URL": "https://example.com/product1"
-                },
-                {
-                    "URL": "https://example.com/product2"
-                },
-                {
-                    "URL": "https://example.com/product3"
-                },
-            ])
-            st.session_state['scraping_all_url_list'] = df
-            selection = st.dataframe(df,
+            st.session_state['scraping_all_url_list'] = df_urls
+            selection = st.dataframe(df_urls,
                                      column_config={
                                          "URL": st.column_config.LinkColumn("URL")
                                      },
@@ -236,32 +245,26 @@ def scrapintg():
                                      selection_mode="multi-row").selection
             # 選択されたURLをセッションステートに保存
             if selection.rows:
-                st.session_state['scraping_selected_url_list'] = df.iloc[selection.rows, :]
+                st.session_state['scraping_selected_url_list'] = df_urls.iloc[selection.rows, :]
             else:
                 st.session_state['scraping_selected_url_list'] = pd.DataFrame()
 
-            # スクレイピングテストボタン
+            # スクレイピングボタン
             if len(st.session_state['scraping_selected_url_list']) > 0:
-                scraping_test_flag = st.button(label='スクレイピング【テスト実行】',
-                                               icon='🧪',
-                                               use_container_width=True)
-            # スクレイピング実行ボタン
-            if len(st.session_state['scraping_all_url_list']) > 0:
-                scraping_all_flag = st.button(label='スクレイピング【全実行】',
-                                              icon='🕷️',
-                                              use_container_width=True)
+                scraping_flag = st.button(label='スクレイピング', icon='🕷️', use_container_width=True)
 
-    # スクレイピングテスト
-    if scraping_test_flag:
-        with st.expander(label='スクレイピングテスト', expanded=True):
-            # ここにスクレイピングのテスト結果を表示する処理を追加
-            st.write("スクレイピングテストを実行しました。")
-    # スクレイピング結果
-    if scraping_all_flag:
-        with st.expander(label='スクレイピング結果', expanded=True):
-            # ここにスクレイピングの結果を表示する処理を追加
-            st.write("スクレイピング結果を表示します。")
+    # スクレイピング
+    if scraping_flag:
+        with st.expander(label='スクレイピング', expanded=True):
+            asyncio.run(scrape_data(st.session_state['scraping_selected_url_list']['URL'].tolist()))
             st.button(label='データを保存', icon='💾', use_container_width=True)
+
+
+async def scrape_data(urls):
+    for url in urls:
+        async with AsyncWebCrawler() as crawler:
+            result = await crawler.arun(url=url)
+            st.write(result.markdown)
 
 
 if __name__ == "__main__":
@@ -271,8 +274,10 @@ if __name__ == "__main__":
     menu = sidebar()
     # メインコンテンツの表示
     if menu == '家具選定':
+        # 選定条件の表示
         conditions = search_conditions()
         # st.write(conditions)
+        # チャット入力
         chat_input()
     elif menu == 'スクレイピング':
         scrapintg()
