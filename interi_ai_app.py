@@ -12,6 +12,17 @@ from pydantic import BaseModel, Field
 from sitemapparser import SiteMapParser
 from sitemapparser.exporters import JSONExporter
 
+FURNITURE_CONDITIONS = {
+    'テイスト': ['ナチュラル', 'インダストリアル'],
+    '納期': ['在庫品', '3週間', '1ヶ月', '1.5〜2ヶ月'],
+    '価格帯': ['Low', 'Middle', 'High'],
+    'カテゴリ': ['ソファ', 'チェア・椅子'],
+    '幅': (0, 8000),
+    '奥行': (0, 4000),
+    '高さ': (0, 3000),
+    '座面高': (0, 3000)
+}
+
 
 def init():
     st.set_page_config(page_title="Interior AI Demo ",
@@ -21,16 +32,10 @@ def init():
     # セッションステート（家具選定）
     if 'furniture_condition_list' not in st.session_state:
         # カラム名とデータ型の辞書を定義
-        column_types = {
-            'テイスト': str,
-            '納期': str,
-            '価格帯': str,
-            'カテゴリ': str,
-            '幅': str,
-            '奥行': str,
-            '高さ': str,
-            '座面高': str
-        }
+        column_types = {}
+        for key in FURNITURE_CONDITIONS.keys():
+            column_types[key] = str
+        # セッションステートのDataFrameを初期化
         st.session_state['furniture_condition_list'] = pd.DataFrame({
             col: pd.Series(dtype=dtype) for col, dtype in column_types.items()
         })
@@ -60,33 +65,55 @@ def sidebar():
 
 def validate_furniture_conditions(conditions):
     # 必要な条件がすべて設定されているかを確認
-    required_str_conditions = ['テイスト', '納期']
-    required_list_conditions = ['テイスト', '納期', '価格帯', 'カテゴリ', '幅', '奥行', '高さ', '座面高']
-    for condition in required_str_conditions:
-        if condition not in conditions or conditions[condition] == '':
-            return False
-    for condition in required_list_conditions:
-        if condition not in conditions or (isinstance(conditions[condition], list) and
-                                           len(conditions[condition]) == 0):
+    for key in FURNITURE_CONDITIONS.keys():
+        if key in conditions:
+            if isinstance(FURNITURE_CONDITIONS[key], tuple):
+                # 数値範囲のチェック
+                if not (isinstance(conditions[key], tuple) and len(conditions[key]) == 2 and
+                        conditions[key][0] <= conditions[key][1]):
+                    print(
+                        f"validate_furniture_conditions() paramater invalid : condition {key} is not a valid range."
+                    )
+                    return False
+            elif isinstance(FURNITURE_CONDITIONS[key], list):
+                # リストのチェック
+                if not (isinstance(conditions[key], list) and
+                        all(isinstance(item, str) for item in conditions[key]) and
+                        len(conditions[key]) > 0):
+                    print(
+                        f"validate_furniture_conditions() paramater invalid : condition {key} is not a valid list."
+                    )
+                    return False
+            else:
+                # 文字列のチェック
+                if not isinstance(conditions[key], str):
+                    return False
+        else:
+            print(
+                f"validate_furniture_conditions() paramater invalid : condition {key} is missing.")
             return False
     return True
 
 
 def add_furniture_condition_list(conditions):
     if validate_furniture_conditions(conditions) == False:
-        st.error("選定条件が正しく設定されていません。")
+        st.invalid("選定条件が正しく設定されていません。")
         return
 
-    new_condition = {
-        'テイスト': conditions['テイスト'],
-        '納期': conditions['納期'],
-        '価格帯': conditions['価格帯'],
-        'カテゴリ': conditions['カテゴリ'],
-        '幅': f"{conditions['幅'][0]} - {conditions['幅'][1]} mm",
-        '奥行': f"{conditions['奥行'][0]} - {conditions['奥行'][1]} mm",
-        '高さ': f"{conditions['高さ'][0]} - {conditions['高さ'][1]} mm",
-        '座面高': f"{conditions['座面高'][0]} - {conditions['座面高'][1]} mm"
-    }
+    new_condition = {}
+    for key in FURNITURE_CONDITIONS.keys():
+        if isinstance(conditions[key], tuple) and len(
+                conditions[key]) == 2 and conditions[key][0] <= conditions[key][1]:
+            # 数値範囲の場合、文字列に変換
+            new_condition[key] = f"{conditions[key][0]} - {conditions[key][1]} mm"
+        else:
+            # リストの場合、カンマ区切りの文字列に変換
+            # if isinstance(conditions[key], list):
+            #     new_condition[key] = ', '.join(conditions[key])
+            # else:   # 単一選択の場合
+            #     new_condition[key] = conditions[key]
+            new_condition[key] = conditions[key]
+
     # 新しい行をDataFrameとして作成
     new_row_df = pd.DataFrame([new_condition])
 
@@ -102,41 +129,28 @@ def search_conditions():
             sac.divider(label='条件設定', icon='gear-fill', align='start', color='red')
             # テイスト
             with st.container(border=True):
-                taste = sac.chip(items=[
-                    sac.ChipItem(label='ナチュラル', icon='tree-fill'),
-                    sac.ChipItem(label='インダストリアル', icon='building-fill'),
-                ],
-                                 label='テイスト',
-                                 key='furniture_taste_chip',
-                                 align='start',
-                                 radius='xl',
-                                 variant='light',
-                                 multiple=False)
+                taste = sac.chip(
+                    items=[sac.ChipItem(label=t) for t in FURNITURE_CONDITIONS['テイスト']],
+                    label='テイスト',
+                    align='start',
+                    radius='xl',
+                    variant='outline',
+                    multiple=True)
 
             # 納期
             with st.container(border=True):
-                delivery = sac.chip(items=[
-                    sac.ChipItem(label='在庫品', icon='truck-fill'),
-                    sac.ChipItem(label='3週間', icon='calendar-check-fill'),
-                    sac.ChipItem(label='1ヶ月', icon='calendar-check-fill'),
-                    sac.ChipItem(label='1.5〜2ヶ月', icon='calendar-check-fill'),
-                ],
-                                    label='納期',
-                                    key='furniture_delivery_chip',
-                                    align='start',
-                                    radius='xl',
-                                    variant='outline',
-                                    multiple=False)
+                delivery = sac.chip(
+                    items=[sac.ChipItem(label=t) for t in FURNITURE_CONDITIONS['納期']],
+                    label='納期',
+                    align='start',
+                    radius='xl',
+                    variant='outline',
+                    multiple=True)
 
             # 価格帯
             with st.container(border=True):
-                price = sac.chip(items=[
-                    sac.ChipItem(label='Low', icon='cash-coin'),
-                    sac.ChipItem(label='Middle', icon='cash-coin'),
-                    sac.ChipItem(label='High', icon='cash-coin')
-                ],
+                price = sac.chip(items=[sac.ChipItem(label=t) for t in FURNITURE_CONDITIONS['価格帯']],
                                  label='価格帯',
-                                 key='furniture_price_chip',
                                  align='start',
                                  radius='xl',
                                  variant='outline',
@@ -158,7 +172,6 @@ def search_conditions():
                                 ]),
                 ],
                                         label='カテゴリ',
-                                        key='furniture_category_cascader',
                                         placeholder='カテゴリを選択してください（まだ全カテゴリ入れてません）',
                                         multiple=True,
                                         search=True,
@@ -170,38 +183,38 @@ def search_conditions():
                 with col1_1:
                     # 幅
                     witdh = st.slider(label='幅',
-                                      key='furniture_width_slider',
-                                      min_value=0,
-                                      max_value=8000,
-                                      value=(0, 8000),
+                                      min_value=FURNITURE_CONDITIONS['幅'][0],
+                                      max_value=FURNITURE_CONDITIONS['幅'][1],
+                                      value=(FURNITURE_CONDITIONS['幅'][0],
+                                             FURNITURE_CONDITIONS['幅'][1]),
                                       step=100,
                                       format='%d mm',
                                       help='幅の範囲を選択してください。')
                     # 奥行
                     depth = st.slider(label='奥行',
-                                      key='furniture_depth_slider',
-                                      min_value=0,
-                                      max_value=4000,
-                                      value=(0, 4000),
+                                      min_value=FURNITURE_CONDITIONS['奥行'][0],
+                                      max_value=FURNITURE_CONDITIONS['奥行'][1],
+                                      value=(FURNITURE_CONDITIONS['奥行'][0],
+                                             FURNITURE_CONDITIONS['奥行'][1]),
                                       step=100,
                                       format='%d mm',
                                       help='奥行の範囲を選択してください。')
                 with col1_2:
                     # 高さ
                     height = st.slider(label='高さ',
-                                       key='furniture_height_slider',
-                                       min_value=0,
-                                       max_value=3000,
-                                       value=(0, 3000),
+                                       min_value=FURNITURE_CONDITIONS['高さ'][0],
+                                       max_value=FURNITURE_CONDITIONS['高さ'][1],
+                                       value=(FURNITURE_CONDITIONS['高さ'][0],
+                                              FURNITURE_CONDITIONS['高さ'][1]),
                                        step=100,
                                        format='%d mm',
                                        help='高さの範囲を選択してください。')
                     # 座面高
                     sheet_height = st.slider(label='座面高',
-                                             key='furniture_sheet_height_slider',
-                                             min_value=0,
-                                             max_value=3000,
-                                             value=(0, 3000),
+                                             min_value=FURNITURE_CONDITIONS['座面高'][0],
+                                             max_value=FURNITURE_CONDITIONS['座面高'][1],
+                                             value=(FURNITURE_CONDITIONS['座面高'][0],
+                                                    FURNITURE_CONDITIONS['座面高'][1]),
                                              step=100,
                                              format='%d mm',
                                              help='座面高の範囲を選択してください。')
@@ -227,10 +240,26 @@ def search_conditions():
             sac.divider(label='条件一覧', icon='card-checklist', align='start', color='red')
             # 選定条件一覧
             with st.container(border=True):
-                st.dataframe(st.session_state['furniture_condition_list'],
+                st.dataframe(data=st.session_state['furniture_condition_list'],
+                             key='furniture_condition_list_df',
                              hide_index=True,
                              on_select="rerun",
                              selection_mode="multi-row")
+                # 選択された行を削除
+                selected_rows_indices = st.session_state.furniture_condition_list_df["selection"][
+                    "rows"]
+                if st.button(label="選択されたアイテムを削除",
+                             icon='🗑️',
+                             disabled=not selected_rows_indices,
+                             use_container_width=True):
+                    if selected_rows_indices:
+                        # 選択された行のインデックスに基づいてDataFrameから行を削除
+                        # drop() メソッドで指定したインデックスの行を削除します
+                        st.session_state['furniture_condition_list'] = \
+                            st.session_state['furniture_condition_list'].drop(selected_rows_indices).reset_index(drop=True)
+                        st.rerun()  # データフレームを更新するために再実行
+                    else:
+                        st.warning("削除するアイテムを選択してください。")
 
 
 def chat_input():
@@ -432,8 +461,8 @@ JSON以外の文字やコメントは絶対に絶対に絶対に出力しない�
                 # for link in result.links["internal"]:
                 #     st.markdown(f"[{link['text']}]({link['href']})")
             else:
-                st.error(
-                    f"Failed to scrape {url}: status_code:{result.status_code} message:{result.error_message}"
+                st.invalid(
+                    f"Failed to scrape {url}: status_code:{result.status_code} message:{result.invalid_message}"
                 )
                 continue
 
@@ -468,8 +497,8 @@ async def scrape_item_list(url):
             # for link in result.links["internal"]:
             #     st.markdown(f"[{link['text']}]({link['href']})")
         else:
-            st.error(
-                f"Failed to scrape {url}: status_code:{result.status_code} message:{result.error_message}"
+            st.invalid(
+                f"Failed to scrape {url}: status_code:{result.status_code} message:{result.invalid_message}"
             )
 
 
